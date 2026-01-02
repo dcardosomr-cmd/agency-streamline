@@ -1,49 +1,9 @@
 import { motion } from "framer-motion";
-import { Mail, Share2, FileText, CheckCircle, Clock, XCircle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/services/api";
+import { Mail, Share2, FileText, CheckCircle, Clock, XCircle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const activities = [
-  {
-    id: 1,
-    type: "email",
-    title: "Newsletter Campaign Approved",
-    client: "TechCorp Industries",
-    time: "2 hours ago",
-    status: "approved",
-  },
-  {
-    id: 2,
-    type: "social",
-    title: "Instagram Post Scheduled",
-    client: "Green Solutions Ltd",
-    time: "4 hours ago",
-    status: "pending",
-  },
-  {
-    id: 3,
-    type: "blog",
-    title: "Blog Article Rejected",
-    client: "Nova Ventures",
-    time: "5 hours ago",
-    status: "rejected",
-  },
-  {
-    id: 4,
-    type: "social",
-    title: "LinkedIn Campaign Live",
-    client: "Atlas Media Group",
-    time: "1 day ago",
-    status: "approved",
-  },
-  {
-    id: 5,
-    type: "email",
-    title: "Promo Email Sent",
-    client: "TechCorp Industries",
-    time: "1 day ago",
-    status: "approved",
-  },
-];
+import { Skeleton } from "@/components/ui/skeleton";
 
 const typeConfig = {
   email: { icon: Mail, color: "text-primary" },
@@ -58,6 +18,12 @@ const statusConfig = {
 };
 
 export function CampaignActivity() {
+  const { data: activities, isLoading, error } = useQuery({
+    queryKey: ["campaignActivities"],
+    queryFn: () => api.getCampaignActivities(5),
+    staleTime: 30000,
+  });
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -71,7 +37,25 @@ export function CampaignActivity() {
       </div>
 
       <div className="p-4 space-y-4">
-        {activities.map((activity, index) => {
+        {isLoading ? (
+          <>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="flex items-start gap-3">
+                <Skeleton className="w-8 h-8 rounded-lg" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              </div>
+            ))}
+          </>
+        ) : error ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <AlertCircle className="w-8 h-8 mx-auto mb-2 text-destructive" />
+            <p className="text-sm">Failed to load activities</p>
+          </div>
+        ) : activities && activities.length > 0 ? (
+          activities.map((activity, index) => {
           const TypeIcon = typeConfig[activity.type as keyof typeof typeConfig].icon;
           const typeColor = typeConfig[activity.type as keyof typeof typeConfig].color;
           const StatusIcon = statusConfig[activity.status as keyof typeof statusConfig].icon;
@@ -98,7 +82,13 @@ export function CampaignActivity() {
               </div>
             </motion.div>
           );
-        })}
+        })
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            <Share2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No recent activity</p>
+          </div>
+        )}
       </div>
     </motion.div>
   );

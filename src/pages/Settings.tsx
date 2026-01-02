@@ -1,19 +1,32 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Button } from "@/components/ui/button";
 import { 
   User,
   Building2,
   Bell,
   Shield,
   Palette,
-  Globe,
   CreditCard,
   Users,
   Mail,
-  Key
+  Key,
+  UserCog
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useAuth } from "@/contexts/AuthContext";
+import { UserRole, ROLE_DISPLAY_NAMES } from "@/types/auth";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { usePermissions } from "@/hooks/usePermissions";
+import { AgencyDetailsForm, loadAgencyDetails } from "@/components/settings/AgencyDetailsForm";
+import { toast } from "@/components/ui/sonner";
 
 const settingsSections = [
   {
@@ -49,6 +62,33 @@ const settingsSections = [
 ];
 
 const Settings = () => {
+  const [openSetting, setOpenSetting] = useState<string | null>(null);
+  const { user, setUser } = useAuth();
+  const { isAgencyUser } = usePermissions();
+
+  const handleSettingClick = (settingName: string) => {
+    setOpenSetting(settingName);
+  };
+
+  const handleCloseDialog = () => {
+    setOpenSetting(null);
+  };
+
+  const getSettingContent = (settingName: string) => {
+    const allItems = settingsSections.flatMap(section => section.items);
+    const setting = allItems.find(item => item.name === settingName);
+    return setting || null;
+  };
+
+  const handleRoleChange = (newRole: UserRole) => {
+    if (user) {
+      setUser({
+        ...user,
+        role: newRole,
+      });
+    }
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6 max-w-4xl">
@@ -60,6 +100,44 @@ const Settings = () => {
           <h1 className="text-2xl font-bold text-foreground">Settings</h1>
           <p className="text-muted-foreground mt-1">Manage your account and workspace preferences</p>
         </motion.div>
+
+        {/* Role Switcher (Demo Only) */}
+        {isAgencyUser() && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="glass-card rounded-xl p-6 border-2 border-primary/20"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <UserCog className="w-5 h-5 text-primary" />
+              <div>
+                <h3 className="font-semibold text-foreground">Role Switcher (Demo)</h3>
+                <p className="text-sm text-muted-foreground">Switch roles to test permissions</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium text-foreground">Current Role:</label>
+              <Select
+                value={user?.role}
+                onValueChange={(value) => handleRoleChange(value as UserRole)}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.values(UserRole).map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {ROLE_DISPLAY_NAMES[role]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Note: This is for demonstration purposes only. In production, roles would be managed by administrators.
+            </p>
+          </motion.div>
+        )}
 
         {/* Settings Sections */}
         <div className="space-y-8">
@@ -80,6 +158,7 @@ const Settings = () => {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: sectionIndex * 0.1 + itemIndex * 0.05 }}
+                    onClick={() => handleSettingClick(item.name)}
                     className="w-full flex items-center gap-4 p-4 hover:bg-secondary/30 transition-colors text-left group"
                   >
                     <div className="p-2.5 rounded-lg bg-secondary group-hover:bg-primary/10 transition-colors">
@@ -106,6 +185,54 @@ const Settings = () => {
           ))}
         </div>
       </div>
+
+      {/* Settings Dialog */}
+      <Dialog open={openSetting !== null} onOpenChange={handleCloseDialog}>
+        <DialogContent className="max-w-2xl">
+          {openSetting && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3">
+                  {(() => {
+                    const setting = getSettingContent(openSetting);
+                    if (setting) {
+                      const Icon = setting.icon;
+                      return (
+                        <>
+                          <Icon className="w-5 h-5" />
+                          {setting.name}
+                        </>
+                      );
+                    }
+                    return openSetting;
+                  })()}
+                </DialogTitle>
+                <DialogDescription>
+                  {getSettingContent(openSetting)?.description}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4">
+                {openSetting === "Agency Details" ? (
+                  <AgencyDetailsForm
+                    initialData={loadAgencyDetails() || undefined}
+                    onSave={() => {
+                      toast.success("Agency details updated successfully");
+                      handleCloseDialog();
+                    }}
+                    onCancel={handleCloseDialog}
+                    showActions={true}
+                  />
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>This setting is currently being developed.</p>
+                    <p className="text-sm mt-2">Settings content for "{openSetting}" will be available soon.</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };

@@ -10,11 +10,28 @@ import {
   Mail, 
   Phone, 
   MoreHorizontal,
-  ExternalLink
+  ExternalLink,
+  Edit,
+  Trash2,
+  Eye
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CreateClientModal } from "@/components/clients/CreateClientModal";
+import { ClientDetailsModal } from "@/components/clients/ClientDetailsModal";
+import { EditClientModal } from "@/components/clients/EditClientModal";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "@/components/ui/sonner";
+import { usePermissions } from "@/hooks/usePermissions";
+import { Permission } from "@/types/auth";
+import { PermissionGuard } from "@/components/PermissionGuard";
 
-const clients = [
+const initialClients = [
   {
     id: 1,
     name: "TechCorp Industries",
@@ -89,9 +106,73 @@ const statusStyles = {
   inactive: "bg-muted text-muted-foreground",
 };
 
+type Client = {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  status: "active" | "pending" | "inactive";
+  projects: number;
+  revenue: string;
+  lastActivity: string;
+  industry: string;
+};
+
 const Clients = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "pending" | "inactive">("all");
+  const [isCreateClientModalOpen, setIsCreateClientModalOpen] = useState(false);
+  const [clients, setClients] = useState<Client[]>(initialClients);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [isClientDetailsModalOpen, setIsClientDetailsModalOpen] = useState(false);
+  const [clientToEdit, setClientToEdit] = useState<Client | null>(null);
+  const [isEditClientModalOpen, setIsEditClientModalOpen] = useState(false);
+  const { canViewAllClients, canManageUsers } = usePermissions();
+
+  const handleAddClient = (newClient: {
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+    industry: string;
+  }) => {
+    const client = {
+      id: Math.max(...clients.map(c => c.id), 0) + 1,
+      name: newClient.name,
+      email: newClient.email,
+      phone: newClient.phone || "N/A",
+      status: "active" as const,
+      projects: 0,
+      revenue: "$0",
+      lastActivity: "Just now",
+      industry: newClient.industry,
+    };
+    setClients([...clients, client]);
+    toast.success("Client added successfully", {
+      description: `${client.name} has been added to your clients list.`,
+    });
+  };
+
+  const handleDeleteClient = (clientId: number) => {
+    setClients(clients.filter(client => client.id !== clientId));
+  };
+
+  const handleUpdateClient = (clientId: number, updatedData: {
+    name: string;
+    email: string;
+    phone: string;
+    industry: string;
+    status: "active" | "pending" | "inactive";
+  }) => {
+    setClients(clients.map(client => 
+      client.id === clientId 
+        ? { ...client, ...updatedData }
+        : client
+    ));
+    toast.success("Client updated successfully", {
+      description: `${updatedData.name} has been updated.`,
+    });
+  };
 
   const filteredClients = clients.filter((client) => {
     const matchesSearch = client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -113,10 +194,15 @@ const Clients = () => {
             <h1 className="text-2xl font-bold text-foreground">Clients</h1>
             <p className="text-muted-foreground mt-1">Manage your client relationships</p>
           </div>
-          <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground w-fit">
-            <Plus className="w-4 h-4" />
-            Add Client
-          </Button>
+          <PermissionGuard permission={Permission.MANAGE_USERS}>
+            <Button 
+              onClick={() => setIsCreateClientModalOpen(true)}
+              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground w-fit"
+            >
+              <Plus className="w-4 h-4" />
+              Add Client
+            </Button>
+          </PermissionGuard>
         </motion.div>
 
         {/* Filters Bar */}
@@ -176,9 +262,63 @@ const Clients = () => {
                     <span className="text-xs text-muted-foreground">{client.industry}</span>
                   </div>
                 </div>
-                <button className="p-1.5 rounded-md hover:bg-secondary transition-colors opacity-0 group-hover:opacity-100">
-                  <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button 
+                      type="button"
+                      className="p-1.5 rounded-md hover:bg-secondary transition-colors opacity-0 group-hover:opacity-100"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem 
+                      onSelect={() => {
+                        setSelectedClient(client);
+                        setIsClientDetailsModalOpen(true);
+                      }}
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      View Details
+                    </DropdownMenuItem>
+                    {canManageUsers() && (
+                      <>
+                        <DropdownMenuItem 
+                          onSelect={() => {
+                            setClientToEdit(client);
+                            setIsEditClientModalOpen(true);
+                          }}
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit Client
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                          onSelect={() => {
+                            const clientToDelete = client;
+                            toast.error("Delete client", {
+                              description: `Are you sure you want to delete ${clientToDelete.name}?`,
+                              action: {
+                                label: "Delete",
+                                onClick: () => {
+                                  handleDeleteClient(clientToDelete.id);
+                                  toast.success("Client deleted", {
+                                    description: `${clientToDelete.name} has been deleted.`,
+                                  });
+                                },
+                              },
+                            });
+                          }}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete Client
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               <div className="space-y-2 mb-4">
@@ -214,6 +354,34 @@ const Clients = () => {
           ))}
         </div>
       </div>
+
+      {/* Create Client Modal */}
+      <CreateClientModal 
+        isOpen={isCreateClientModalOpen} 
+        onClose={() => setIsCreateClientModalOpen(false)}
+        onAddClient={handleAddClient}
+      />
+
+      {/* Client Details Modal */}
+      <ClientDetailsModal
+        isOpen={isClientDetailsModalOpen}
+        onClose={() => {
+          setIsClientDetailsModalOpen(false);
+          setSelectedClient(null);
+        }}
+        client={selectedClient}
+      />
+
+      {/* Edit Client Modal */}
+      <EditClientModal
+        isOpen={isEditClientModalOpen}
+        onClose={() => {
+          setIsEditClientModalOpen(false);
+          setClientToEdit(null);
+        }}
+        client={clientToEdit}
+        onUpdateClient={handleUpdateClient}
+      />
     </AppLayout>
   );
 };

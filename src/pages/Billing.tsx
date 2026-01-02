@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
+import { CreateInvoiceModal } from "@/components/billing/CreateInvoiceModal";
 import { 
   Plus, 
   Search,
@@ -83,6 +84,7 @@ const statusConfig = {
 
 const Billing = () => {
   const [filter, setFilter] = useState<string>("all");
+  const [isCreateInvoiceModalOpen, setIsCreateInvoiceModalOpen] = useState(false);
 
   const filteredInvoices = filter === "all" 
     ? invoices 
@@ -91,6 +93,156 @@ const Billing = () => {
   const totalRevenue = invoices.filter(i => i.status === "paid").reduce((sum, i) => sum + i.amount, 0);
   const pendingAmount = invoices.filter(i => i.status === "pending" || i.status === "overdue").reduce((sum, i) => sum + i.amount, 0);
   const overdueAmount = invoices.filter(i => i.status === "overdue").reduce((sum, i) => sum + i.amount, 0);
+
+  const handleSendInvoice = useCallback((invoice: typeof invoices[0]) => {
+    console.log(`Sending invoice ${invoice.id}`);
+    alert(`Send invoice functionality will be implemented for ${invoice.id}`);
+  }, []);
+
+  const handleViewInvoice = useCallback((invoice: typeof invoices[0]) => {
+    console.log(`Viewing invoice ${invoice.id}`);
+    alert(`View invoice functionality will be implemented for ${invoice.id}`);
+  }, []);
+
+  const handleMoreOptions = useCallback((invoice: typeof invoices[0]) => {
+    console.log(`More options for invoice ${invoice.id}`);
+    alert(`More options functionality will be implemented for ${invoice.id}`);
+  }, []);
+
+  const handleDownloadInvoice = (invoice: typeof invoices[0]) => {
+    // Generate invoice HTML content
+    const invoiceHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Invoice ${invoice.id}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      color: #333;
+    }
+    .header {
+      border-bottom: 2px solid #000;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+    .invoice-info {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 30px;
+    }
+    .info-section {
+      flex: 1;
+    }
+    .info-section h3 {
+      margin-top: 0;
+      color: #666;
+      font-size: 14px;
+      text-transform: uppercase;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 30px 0;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    th {
+      background-color: #f5f5f5;
+      font-weight: bold;
+    }
+    .total {
+      text-align: right;
+      margin-top: 20px;
+    }
+    .total-row {
+      font-size: 18px;
+      font-weight: bold;
+      border-top: 2px solid #000;
+      padding-top: 10px;
+    }
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .status-paid { background-color: #d4edda; color: #155724; }
+    .status-pending { background-color: #fff3cd; color: #856404; }
+    .status-overdue { background-color: #f8d7da; color: #721c24; }
+    .status-draft { background-color: #e2e3e5; color: #383d41; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>INVOICE</h1>
+    <p style="font-size: 24px; font-weight: bold; margin: 0;">${invoice.id}</p>
+  </div>
+  
+  <div class="invoice-info">
+    <div class="info-section">
+      <h3>Bill To:</h3>
+      <p style="font-weight: bold; margin: 5px 0;">${invoice.client}</p>
+    </div>
+    <div class="info-section" style="text-align: right;">
+      <h3>Invoice Details:</h3>
+      <p style="margin: 5px 0;"><strong>Due Date:</strong> ${invoice.dueDate}</p>
+      ${invoice.paidDate ? `<p style="margin: 5px 0;"><strong>Paid Date:</strong> ${invoice.paidDate}</p>` : ''}
+      <p style="margin: 5px 0;">
+        <strong>Status:</strong> 
+        <span class="status status-${invoice.status}">${statusConfig[invoice.status as keyof typeof statusConfig]?.label || invoice.status}</span>
+      </p>
+    </div>
+  </div>
+  
+  <table>
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th style="text-align: right;">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Invoice Items (${invoice.items} items)</td>
+        <td style="text-align: right;">$${invoice.amount.toLocaleString()}</td>
+      </tr>
+    </tbody>
+  </table>
+  
+  <div class="total">
+    <div class="total-row">
+      <span>Total Amount: $${invoice.amount.toLocaleString()}</span>
+    </div>
+  </div>
+  
+  <div style="margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; text-align: center;">
+    <p>Thank you for your business!</p>
+  </div>
+</body>
+</html>
+    `;
+
+    // Create a blob and download
+    const blob = new Blob([invoiceHTML], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Invoice-${invoice.id}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <AppLayout>
@@ -105,7 +257,10 @@ const Billing = () => {
             <h1 className="text-2xl font-bold text-foreground">Billing & Invoices</h1>
             <p className="text-muted-foreground mt-1">Manage invoices and track payments</p>
           </div>
-          <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground w-fit">
+          <Button 
+            onClick={() => setIsCreateInvoiceModalOpen(true)}
+            className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground w-fit"
+          >
             <Plus className="w-4 h-4" />
             New Invoice
           </Button>
@@ -236,20 +391,68 @@ const Billing = () => {
                           <p className="text-xs text-success">Paid: {invoice.paidDate}</p>
                         )}
                       </td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <td className="px-5 py-4" style={{ position: 'relative', zIndex: 10 }}>
+                        <div className="flex items-center justify-end gap-1" style={{ position: 'relative', zIndex: 11 }}>
+                          <Button 
+                            type="button"
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 cursor-pointer"
+                            style={{ position: 'relative', zIndex: 12, pointerEvents: 'auto' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handleDownloadInvoice(invoice);
+                            }}
+                            title="Download invoice"
+                          >
                             <Download className="w-4 h-4" />
                           </Button>
                           {invoice.status === "pending" && (
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button 
+                              type="button"
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 cursor-pointer"
+                              style={{ position: 'relative', zIndex: 12, pointerEvents: 'auto' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                handleSendInvoice(invoice);
+                              }}
+                              title="Send invoice"
+                            >
                               <Send className="w-4 h-4" />
                             </Button>
                           )}
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Button 
+                            type="button"
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 cursor-pointer"
+                            style={{ position: 'relative', zIndex: 12, pointerEvents: 'auto' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handleViewInvoice(invoice);
+                            }}
+                            title="View invoice"
+                          >
                             <ExternalLink className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Button 
+                            type="button"
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 cursor-pointer"
+                            style={{ position: 'relative', zIndex: 12, pointerEvents: 'auto' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handleMoreOptions(invoice);
+                            }}
+                            title="More options"
+                          >
                             <MoreHorizontal className="w-4 h-4" />
                           </Button>
                         </div>
@@ -262,6 +465,12 @@ const Billing = () => {
           </div>
         </motion.div>
       </div>
+
+      {/* Create Invoice Modal */}
+      <CreateInvoiceModal 
+        isOpen={isCreateInvoiceModalOpen}
+        onClose={() => setIsCreateInvoiceModalOpen(false)}
+      />
     </AppLayout>
   );
 };

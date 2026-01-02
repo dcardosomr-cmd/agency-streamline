@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,20 @@ import {
   MoreHorizontal
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { usePermissions } from "@/hooks/usePermissions";
+import { PermissionGuard } from "@/components/PermissionGuard";
+import { Permission } from "@/types/auth";
 
 const approvals = [
   {
@@ -89,14 +103,113 @@ const statusConfig = {
   revision: { icon: MessageSquare, color: "text-primary", bg: "bg-primary/10", label: "Revision Requested" },
 };
 
+type Approval = {
+  id: number;
+  title: string;
+  type: string;
+  client: string;
+  status: string;
+  submittedBy: string;
+  submittedAt: string;
+  dueDate: string;
+  description: string;
+  feedback?: string;
+  approvedAt?: string;
+};
+
+const STORAGE_KEY = "agency_approvals_data";
+
+// Load approvals from localStorage or use default data
+const loadApprovals = (): Approval[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (error) {
+    console.error("Failed to load approvals from localStorage:", error);
+  }
+  return approvals;
+};
+
+// Save approvals to localStorage
+const saveApprovals = (approvalsList: Approval[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(approvalsList));
+  } catch (error) {
+    console.error("Failed to save approvals to localStorage:", error);
+  }
+};
+
 const Approvals = () => {
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string>("all");
+  const [approvalsList, setApprovalsList] = useState<Approval[]>(() => loadApprovals());
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [viewChangesDialogOpen, setViewChangesDialogOpen] = useState(false);
+  const [selectedApproval, setSelectedApproval] = useState<Approval | null>(null);
+  const [rejectFeedback, setRejectFeedback] = useState("");
+  const { canApproveContent, canRejectContent } = usePermissions();
+
+  // Save to localStorage and invalidate queries whenever approvalsList changes
+  useEffect(() => {
+    saveApprovals(approvalsList);
+    // Invalidate dashboard queries to refresh stats
+    queryClient.invalidateQueries({ queryKey: ["dashboardStats"] });
+    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  }, [approvalsList, queryClient]);
 
   const filteredApprovals = filter === "all" 
-    ? approvals 
-    : approvals.filter(a => a.status === filter);
+    ? approvalsList 
+    : approvalsList.filter(a => a.status === filter);
 
-  const pendingCount = approvals.filter(a => a.status === "pending").length;
+  const pendingCount = approvalsList.filter(a => a.status === "pending").length;
+
+  const handlePreview = (approval: Approval) => {
+    setSelectedApproval(approval);
+    setPreviewDialogOpen(true);
+  };
+
+  const handleViewChanges = (approval: Approval) => {
+    setSelectedApproval(approval);
+    setViewChangesDialogOpen(true);
+  };
+
+  const handleReject = (approval: Approval) => {
+    setSelectedApproval(approval);
+    setRejectFeedback("");
+    setRejectDialogOpen(true);
+  };
+
+  const handleRejectConfirm = () => {
+    if (!selectedApproval) return;
+    
+    setApprovalsList(prev => prev.map(approval => 
+      approval.id === selectedApproval.id
+        ? { ...approval, status: "rejected" as const, feedback: rejectFeedback || "No feedback provided." }
+        : approval
+    ));
+    
+    setRejectDialogOpen(false);
+    setSelectedApproval(null);
+    setRejectFeedback("");
+    toast.success("Content rejected", {
+      description: "The content has been rejected and feedback has been recorded.",
+    });
+  };
+
+  const handleApprove = (approval: Approval) => {
+    setApprovalsList(prev => prev.map(a => 
+      a.id === approval.id
+        ? { ...a, status: "approved" as const, approvedAt: "Just now" }
+        : a
+    ));
+    
+    toast.success("Content approved", {
+      description: `${approval.title} has been approved successfully.`,
+    });
+  };
 
   return (
     <AppLayout>
@@ -192,27 +305,60 @@ const Approvals = () => {
 
                     {approval.status === "pending" && (
                       <div className="flex items-center gap-2 mt-2">
-                        <Button variant="ghost" size="sm" className="gap-1.5">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="gap-1.5"
+                          onClick={() => handlePreview(approval)}
+                        >
                           <Eye className="w-4 h-4" />
                           Preview
                         </Button>
-                        <Button variant="ghost" size="sm" className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10">
-                          <XCircle className="w-4 h-4" />
-                          Reject
-                        </Button>
-                        <Button size="sm" className="gap-1.5 bg-success hover:bg-success/90 text-success-foreground">
-                          <CheckCircle2 className="w-4 h-4" />
-                          Approve
-                        </Button>
+                        <PermissionGuard permission={Permission.REJECT_CONTENT}>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleReject(approval)}
+                          >
+                            <XCircle className="w-4 h-4" />
+                            Reject
+                          </Button>
+                        </PermissionGuard>
+                        <PermissionGuard permission={Permission.APPROVE_CONTENT}>
+                          <Button 
+                            size="sm" 
+                            className="gap-1.5 bg-success hover:bg-success/90 text-success-foreground"
+                            onClick={() => handleApprove(approval)}
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            Approve
+                          </Button>
+                        </PermissionGuard>
                       </div>
                     )}
 
                     {approval.status === "revision" && (
                       <div className="flex items-center gap-2 mt-2">
-                        <Button variant="ghost" size="sm" className="gap-1.5">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="gap-1.5"
+                          onClick={() => handleViewChanges(approval)}
+                        >
                           <Eye className="w-4 h-4" />
                           View Changes
                         </Button>
+                        <PermissionGuard permission={Permission.APPROVE_CONTENT}>
+                          <Button 
+                            size="sm" 
+                            className="gap-1.5 bg-success hover:bg-success/90 text-success-foreground"
+                            onClick={() => handleApprove(approval)}
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            Approve Revision
+                          </Button>
+                        </PermissionGuard>
                       </div>
                     )}
                   </div>
@@ -222,6 +368,167 @@ const Approvals = () => {
           })}
         </div>
       </div>
+
+      {/* Preview Dialog */}
+      <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedApproval?.title}</DialogTitle>
+            <DialogDescription>
+              Preview content for {selectedApproval?.client}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <h4 className="font-semibold mb-2">Description</h4>
+              <p className="text-sm text-muted-foreground">{selectedApproval?.description}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Type:</span>
+                <span className="ml-2 font-medium capitalize">{selectedApproval?.type}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Submitted by:</span>
+                <span className="ml-2 font-medium">{selectedApproval?.submittedBy}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Submitted:</span>
+                <span className="ml-2 font-medium">{selectedApproval?.submittedAt}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Due date:</span>
+                <span className="ml-2 font-medium">{selectedApproval?.dueDate}</span>
+              </div>
+            </div>
+            <div className="p-4 bg-secondary rounded-lg border border-dashed">
+              <p className="text-sm text-muted-foreground text-center">
+                Content preview would be displayed here
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Content</DialogTitle>
+            <DialogDescription>
+              Provide feedback for rejecting {selectedApproval?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              placeholder="Enter feedback for the rejection (optional but recommended)..."
+              value={rejectFeedback}
+              onChange={(e) => setRejectFeedback(e.target.value)}
+              className="min-h-[120px]"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleRejectConfirm}
+            >
+              Reject Content
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Changes Dialog */}
+      <Dialog open={viewChangesDialogOpen} onOpenChange={setViewChangesDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>View Changes - {selectedApproval?.title}</DialogTitle>
+            <DialogDescription>
+              Review the changes made after revision request for {selectedApproval?.client}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <h4 className="font-semibold mb-2">Original Feedback</h4>
+              <div className="p-3 rounded-lg bg-secondary/50 border-l-2 border-warning">
+                <p className="text-sm text-muted-foreground">
+                  {selectedApproval?.feedback || "No feedback provided"}
+                </p>
+              </div>
+            </div>
+            
+            <div>
+              <h4 className="font-semibold mb-2">Updated Content</h4>
+              <div className="p-4 bg-secondary rounded-lg border border-dashed">
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-sm font-medium text-muted-foreground">Title:</span>
+                    <p className="text-sm text-foreground mt-1">{selectedApproval?.title}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-muted-foreground">Description:</span>
+                    <p className="text-sm text-foreground mt-1">{selectedApproval?.description}</p>
+                  </div>
+                  <div className="pt-3 border-t border-border">
+                    <p className="text-sm text-muted-foreground text-center">
+                      Content preview would be displayed here showing the updated version
+                    </p>
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      Changes made based on feedback: {selectedApproval?.feedback}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Type:</span>
+                <span className="ml-2 font-medium capitalize">{selectedApproval?.type}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Submitted by:</span>
+                <span className="ml-2 font-medium">{selectedApproval?.submittedBy}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Submitted:</span>
+                <span className="ml-2 font-medium">{selectedApproval?.submittedAt}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Due date:</span>
+                <span className="ml-2 font-medium">{selectedApproval?.dueDate}</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewChangesDialogOpen(false)}>
+              Close
+            </Button>
+            {canApproveContent() && (
+              <Button 
+                className="bg-success hover:bg-success/90 text-success-foreground"
+                onClick={() => {
+                  if (selectedApproval) {
+                    handleApprove(selectedApproval);
+                    setViewChangesDialogOpen(false);
+                  }
+                }}
+              >
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                Approve Revision
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 };

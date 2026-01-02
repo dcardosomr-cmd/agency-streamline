@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { 
   Instagram,
@@ -14,6 +15,12 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { 
+  SocialMediaPostStatus, 
+  SocialMediaPostStatusConfig 
+} from "@/lib/lifecycle";
+import { toast } from "@/components/ui/sonner";
+import { EditPostModal } from "./EditPostModal";
 
 // TikTok icon component
 const TikTokIcon = ({ className }: { className?: string }) => (
@@ -36,7 +43,7 @@ interface QueuedPost {
   platforms: string[];
   scheduledTime: string;
   scheduledDate: string;
-  status: "scheduled" | "published" | "draft" | "failed";
+  status: SocialMediaPostStatus;
   hasImage: boolean;
   imageUrl?: string;
   client: string;
@@ -49,7 +56,7 @@ const queuedPosts: QueuedPost[] = [
     platforms: ["instagram", "facebook", "linkedin"],
     scheduledTime: "09:00",
     scheduledDate: "Jan 5, 2026",
-    status: "scheduled",
+    status: "approved",
     hasImage: true,
     imageUrl: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=300&h=300&fit=crop",
     client: "TechCorp Industries",
@@ -60,7 +67,7 @@ const queuedPosts: QueuedPost[] = [
     platforms: ["instagram", "twitter"],
     scheduledTime: "14:30",
     scheduledDate: "Jan 5, 2026",
-    status: "scheduled",
+    status: "pending_review",
     hasImage: true,
     imageUrl: "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?w=300&h=300&fit=crop",
     client: "Green Solutions Ltd",
@@ -82,20 +89,56 @@ const queuedPosts: QueuedPost[] = [
     platforms: ["linkedin", "twitter"],
     scheduledTime: "10:00",
     scheduledDate: "Jan 7, 2026",
-    status: "scheduled",
+    status: "approved",
     hasImage: false,
     client: "Nova Ventures",
   },
 ];
 
-const statusStyles = {
-  scheduled: { label: "Scheduled", color: "text-primary", bg: "bg-primary/10" },
-  published: { label: "Published", color: "text-success", bg: "bg-success/10" },
-  draft: { label: "Draft", color: "text-muted-foreground", bg: "bg-muted" },
-  failed: { label: "Failed", color: "text-destructive", bg: "bg-destructive/10" },
-};
-
 export function PostQueue() {
+  const [posts, setPosts] = useState<QueuedPost[]>(queuedPosts);
+  const [editingPost, setEditingPost] = useState<QueuedPost | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  const handleEditPost = (post: QueuedPost) => {
+    setEditingPost(post);
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdatePost = (postId: number, updatedData: {
+    content: string;
+    platforms: string[];
+    scheduledTime: string;
+    scheduledDate: string;
+    client: string;
+  }) => {
+    setPosts((prevPosts) =>
+      prevPosts.map((post) =>
+        post.id === postId
+          ? { ...post, ...updatedData }
+          : post
+      )
+    );
+    toast.success("Post updated", {
+      description: "The post has been successfully updated.",
+    });
+  };
+
+  const handleDeletePost = (post: QueuedPost) => {
+    toast.error("Delete post", {
+      description: `Are you sure you want to delete this post scheduled for ${post.scheduledDate}?`,
+      action: {
+        label: "Delete",
+        onClick: () => {
+          setPosts((prevPosts) => prevPosts.filter((p) => p.id !== post.id));
+          toast.success("Post deleted", {
+            description: "The post has been removed from the queue.",
+          });
+        },
+      },
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -109,7 +152,7 @@ export function PostQueue() {
       </div>
 
       <div className="space-y-3">
-        {queuedPosts.map((post, index) => (
+        {posts.map((post, index) => (
           <motion.div
             key={post.id}
             initial={{ opacity: 0, x: -10 }}
@@ -152,18 +195,32 @@ export function PostQueue() {
                     })}
                     <span className={cn(
                       "px-2 py-0.5 rounded text-xs font-medium",
-                      statusStyles[post.status].bg,
-                      statusStyles[post.status].color
+                      SocialMediaPostStatusConfig[post.status].bg,
+                      SocialMediaPostStatusConfig[post.status].color
                     )}>
-                      {statusStyles[post.status].label}
+                      {SocialMediaPostStatusConfig[post.status].label}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="p-1.5 rounded-md hover:bg-secondary transition-colors">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditPost(post);
+                      }}
+                      className="p-1.5 rounded-md hover:bg-secondary transition-colors"
+                      aria-label="Edit post"
+                    >
                       <Edit2 className="w-4 h-4 text-muted-foreground" />
                     </button>
-                    <button className="p-1.5 rounded-md hover:bg-destructive/10 transition-colors">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeletePost(post);
+                      }}
+                      className="p-1.5 rounded-md hover:bg-destructive/10 transition-colors"
+                      aria-label="Delete post"
+                    >
                       <Trash2 className="w-4 h-4 text-destructive" />
                     </button>
                   </div>
@@ -187,6 +244,16 @@ export function PostQueue() {
           </motion.div>
         ))}
       </div>
+
+      <EditPostModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingPost(null);
+        }}
+        post={editingPost}
+        onUpdatePost={handleUpdatePost}
+      />
     </div>
   );
 }

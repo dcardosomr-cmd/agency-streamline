@@ -1,47 +1,11 @@
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/services/api";
 import { ArrowRight, Clock, CheckCircle2, AlertCircle, PauseCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-
-const projects = [
-  {
-    id: 1,
-    name: "Q1 Brand Campaign",
-    client: "TechCorp Industries",
-    status: "in-progress",
-    progress: 65,
-    dueDate: "Jan 15, 2026",
-    priority: "high",
-  },
-  {
-    id: 2,
-    name: "Social Media Strategy",
-    client: "Green Solutions Ltd",
-    status: "in-progress",
-    progress: 40,
-    dueDate: "Jan 22, 2026",
-    priority: "medium",
-  },
-  {
-    id: 3,
-    name: "Website Redesign",
-    client: "Nova Ventures",
-    status: "review",
-    progress: 90,
-    dueDate: "Jan 8, 2026",
-    priority: "urgent",
-  },
-  {
-    id: 4,
-    name: "Email Marketing Series",
-    client: "Atlas Media Group",
-    status: "completed",
-    progress: 100,
-    dueDate: "Dec 28, 2025",
-    priority: "low",
-  },
-];
+import { Skeleton } from "@/components/ui/skeleton";
 
 const statusConfig = {
   "in-progress": { icon: Clock, color: "text-primary", bg: "bg-primary/10" },
@@ -58,6 +22,13 @@ const priorityColors = {
 };
 
 export function ProjectsOverview() {
+  const navigate = useNavigate();
+  const { data: projects, isLoading, error } = useQuery({
+    queryKey: ["activeProjects"],
+    queryFn: () => api.getActiveProjects(4),
+    staleTime: 60000,
+  });
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -79,7 +50,23 @@ export function ProjectsOverview() {
       </div>
 
       <div className="p-4 space-y-3">
-        {projects.map((project, index) => {
+        {isLoading ? (
+          <>
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+                <Skeleton className="h-2 w-full" />
+              </div>
+            ))}
+          </>
+        ) : error ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <AlertCircle className="w-8 h-8 mx-auto mb-2 text-destructive" />
+            <p className="text-sm">Failed to load projects</p>
+          </div>
+        ) : projects && projects.length > 0 ? (
+          projects.map((project, index) => {
           const StatusIcon = statusConfig[project.status as keyof typeof statusConfig].icon;
           const statusColor = statusConfig[project.status as keyof typeof statusConfig].color;
           const statusBg = statusConfig[project.status as keyof typeof statusConfig].bg;
@@ -90,6 +77,7 @@ export function ProjectsOverview() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.3 + index * 0.05 }}
+              onClick={() => navigate("/projects")}
               className={cn(
                 "p-4 rounded-lg bg-secondary/30 border-l-2 hover:bg-secondary/50 transition-colors cursor-pointer",
                 priorityColors[project.priority as keyof typeof priorityColors]
@@ -124,7 +112,13 @@ export function ProjectsOverview() {
               </div>
             </motion.div>
           );
-        })}
+        })
+        ) : (
+          <div className="text-center py-8 text-muted-foreground">
+            <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No active projects</p>
+          </div>
+        )}
       </div>
     </motion.div>
   );

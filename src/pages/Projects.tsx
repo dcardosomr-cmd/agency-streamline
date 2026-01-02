@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
+import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
+import { ProjectDetailsModal } from "@/components/projects/ProjectDetailsModal";
+import { EditProjectModal } from "@/components/projects/EditProjectModal";
 import { 
   Plus, 
   Search, 
@@ -11,19 +14,42 @@ import {
   PauseCircle,
   Calendar,
   Users,
-  MoreHorizontal
+  MoreHorizontal,
+  Eye,
+  Edit,
+  Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "@/components/ui/sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { format, parse } from "date-fns";
 
-const projects = [
+const initialProjects = [
   {
     id: 1,
     name: "Q1 Brand Campaign",
     client: "TechCorp Industries",
-    status: "in-progress",
+    status: "in-progress" as const,
     progress: 65,
     dueDate: "Jan 15, 2026",
-    priority: "high",
+    priority: "high" as const,
     team: ["JD", "AS", "MK"],
     tasks: { completed: 12, total: 18 },
   },
@@ -31,10 +57,10 @@ const projects = [
     id: 2,
     name: "Social Media Strategy",
     client: "Green Solutions Ltd",
-    status: "in-progress",
+    status: "in-progress" as const,
     progress: 40,
     dueDate: "Jan 22, 2026",
-    priority: "medium",
+    priority: "medium" as const,
     team: ["AS", "RB"],
     tasks: { completed: 6, total: 15 },
   },
@@ -42,10 +68,10 @@ const projects = [
     id: 3,
     name: "Website Redesign",
     client: "Nova Ventures",
-    status: "review",
+    status: "review" as const,
     progress: 90,
     dueDate: "Jan 8, 2026",
-    priority: "urgent",
+    priority: "urgent" as const,
     team: ["JD", "MK", "LT", "AS"],
     tasks: { completed: 27, total: 30 },
   },
@@ -53,10 +79,10 @@ const projects = [
     id: 4,
     name: "Email Marketing Series",
     client: "Atlas Media Group",
-    status: "completed",
+    status: "completed" as const,
     progress: 100,
     dueDate: "Dec 28, 2025",
-    priority: "low",
+    priority: "low" as const,
     team: ["RB"],
     tasks: { completed: 8, total: 8 },
   },
@@ -64,10 +90,10 @@ const projects = [
     id: 5,
     name: "Product Launch Campaign",
     client: "TechCorp Industries",
-    status: "planning",
+    status: "planning" as const,
     progress: 15,
     dueDate: "Feb 10, 2026",
-    priority: "high",
+    priority: "high" as const,
     team: ["JD", "AS"],
     tasks: { completed: 3, total: 20 },
   },
@@ -75,10 +101,10 @@ const projects = [
     id: 6,
     name: "Annual Report Design",
     client: "Urban Development Co",
-    status: "in-progress",
+    status: "in-progress" as const,
     progress: 55,
     dueDate: "Jan 30, 2026",
-    priority: "medium",
+    priority: "medium" as const,
     team: ["MK", "LT"],
     tasks: { completed: 11, total: 20 },
   },
@@ -99,12 +125,132 @@ const priorityStyles = {
   low: { border: "border-l-muted-foreground", badge: "bg-muted text-muted-foreground" },
 };
 
+type Project = typeof initialProjects[0] & { budget?: number; spent?: number };
+
+const STORAGE_KEY = "agency_projects_data";
+
+// Load projects from localStorage or use default data
+const loadProjects = (): Project[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (error) {
+    console.error("Failed to load projects from localStorage:", error);
+  }
+  return initialProjects;
+};
+
+// Save projects to localStorage
+const saveProjects = (projectsList: Project[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(projectsList));
+  } catch (error) {
+    console.error("Failed to save projects to localStorage:", error);
+  }
+};
+
 const Projects = () => {
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string>("all");
+  const [projects, setProjects] = useState<Project[]>(() => loadProjects());
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+
+  // Save to localStorage and invalidate queries whenever projects change
+  useEffect(() => {
+    saveProjects(projects);
+    // Invalidate dashboard queries to refresh stats
+    queryClient.invalidateQueries({ queryKey: ["dashboardStats"] });
+    queryClient.invalidateQueries({ queryKey: ["activeProjects"] });
+    queryClient.invalidateQueries({ queryKey: ["upcomingDeadlines"] });
+    queryClient.invalidateQueries({ queryKey: ["teamWorkload"] });
+  }, [projects, queryClient]);
 
   const filteredProjects = filter === "all" 
     ? projects 
     : projects.filter(p => p.status === filter);
+
+  const handleViewDetails = (project: Project) => {
+    setSelectedProject(project);
+    setIsDetailsModalOpen(true);
+  };
+
+  const handleEditProject = (project: Project) => {
+    setSelectedProject(project);
+    setIsEditModalOpen(true);
+  };
+
+  const handleAddProject = (projectData: {
+    name: string;
+    client: string;
+    priority: "urgent" | "high" | "medium" | "low";
+    status: "planning" | "in-progress" | "review" | "completed" | "paused";
+    dueDate: string;
+    description?: string;
+    team: string[];
+  }) => {
+    // Convert date from "yyyy-MM-dd" to "MMM d, yyyy" format if needed
+    let formattedDueDate = projectData.dueDate;
+    try {
+      const parsed = parse(projectData.dueDate, "yyyy-MM-dd", new Date());
+      if (!isNaN(parsed.getTime())) {
+        formattedDueDate = format(parsed, "MMM d, yyyy");
+      }
+    } catch {
+      // Keep original if parsing fails
+    }
+    
+    const newProject: Project = {
+      id: Math.max(...projects.map(p => p.id), 0) + 1,
+      ...projectData,
+      dueDate: formattedDueDate,
+      progress: projectData.status === "completed" ? 100 : projectData.status === "planning" ? 0 : 50,
+      tasks: { completed: 0, total: 10 },
+    };
+    setProjects(prev => [...prev, newProject]);
+    toast.success("Project created", {
+      description: `${projectData.name} has been created successfully.`,
+    });
+  };
+
+  const handleUpdateProject = (projectId: number, updatedData: {
+    name: string;
+    client: string;
+    priority: "urgent" | "high" | "medium" | "low";
+    status: "planning" | "in-progress" | "review" | "completed" | "paused";
+    dueDate: string;
+    description?: string;
+    team: string[];
+  }) => {
+    setProjects(prev => prev.map(project => 
+      project.id === projectId
+        ? { ...project, ...updatedData }
+        : project
+    ));
+    toast.success("Project updated", {
+      description: "The project has been updated successfully.",
+    });
+  };
+
+  const handleDeleteProject = () => {
+    if (!selectedProject) return;
+    setProjects(prev => prev.filter(p => p.id !== selectedProject.id));
+    toast.success("Project deleted", {
+      description: `${selectedProject.name} has been deleted successfully.`,
+    });
+    setIsDeleteDialogOpen(false);
+    setSelectedProject(null);
+  };
+
+  const handleDeleteClick = (project: Project) => {
+    setSelectedProject(project);
+    setIsDeleteDialogOpen(true);
+  };
 
   return (
     <AppLayout>
@@ -119,7 +265,10 @@ const Projects = () => {
             <h1 className="text-2xl font-bold text-foreground">Projects</h1>
             <p className="text-muted-foreground mt-1">Track and manage your deliverables</p>
           </div>
-          <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground w-fit">
+          <Button 
+            onClick={() => setIsCreateModalOpen(true)}
+            className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground w-fit"
+          >
             <Plus className="w-4 h-4" />
             New Project
           </Button>
@@ -233,15 +382,90 @@ const Projects = () => {
                   </div>
 
                   {/* Actions */}
-                  <button className="p-2 rounded-md hover:bg-secondary transition-colors">
-                    <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button 
+                        type="button"
+                        className="p-2 rounded-md hover:bg-secondary transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => handleViewDetails(project)}>
+                        <Eye className="w-4 h-4 mr-2" />
+                        View Details
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => handleEditProject(project)}>
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit Project
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        className="text-destructive focus:text-destructive"
+                        onSelect={() => handleDeleteClick(project)}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete Project
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </motion.div>
             );
           })}
         </div>
       </div>
+
+      {/* Create Project Modal */}
+      <CreateProjectModal 
+        isOpen={isCreateModalOpen} 
+        onClose={() => setIsCreateModalOpen(false)}
+        onAddProject={handleAddProject}
+      />
+
+      {/* Project Details Modal */}
+      <ProjectDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedProject(null);
+        }}
+        project={selectedProject}
+      />
+
+      {/* Edit Project Modal */}
+      <EditProjectModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedProject(null);
+        }}
+        project={selectedProject}
+        onUpdateProject={handleUpdateProject}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{selectedProject?.name}</strong>? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedProject(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteProject}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 };

@@ -13,6 +13,10 @@ import {
   MoreHorizontal
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { 
+  SocialMediaPostStatus, 
+  SocialMediaPostStatusConfig 
+} from "@/lib/lifecycle";
 
 // TikTok icon component
 const TikTokIcon = ({ className }: { className?: string }) => (
@@ -35,7 +39,7 @@ interface ScheduledPost {
   platforms: string[];
   scheduledTime: string;
   scheduledDate: string;
-  status: "scheduled" | "published" | "draft";
+  status: SocialMediaPostStatus;
   hasImage: boolean;
   client: string;
 }
@@ -47,7 +51,7 @@ const scheduledPosts: ScheduledPost[] = [
     platforms: ["instagram", "facebook", "linkedin"],
     scheduledTime: "09:00",
     scheduledDate: "2026-01-05",
-    status: "scheduled",
+    status: "approved",
     hasImage: true,
     client: "TechCorp Industries",
   },
@@ -57,7 +61,7 @@ const scheduledPosts: ScheduledPost[] = [
     platforms: ["instagram", "twitter"],
     scheduledTime: "14:30",
     scheduledDate: "2026-01-05",
-    status: "scheduled",
+    status: "pending_review",
     hasImage: true,
     client: "Green Solutions Ltd",
   },
@@ -77,7 +81,7 @@ const scheduledPosts: ScheduledPost[] = [
     platforms: ["linkedin", "twitter"],
     scheduledTime: "10:00",
     scheduledDate: "2026-01-07",
-    status: "scheduled",
+    status: "approved",
     hasImage: false,
     client: "Nova Ventures",
   },
@@ -97,7 +101,7 @@ const scheduledPosts: ScheduledPost[] = [
     platforms: ["instagram"],
     scheduledTime: "07:00",
     scheduledDate: "2026-01-08",
-    status: "scheduled",
+    status: "approved",
     hasImage: true,
     client: "Urban Development Co",
   },
@@ -328,9 +332,8 @@ export function ContentCalendar({ onCreatePost }: ContentCalendarProps) {
                         key={post.id}
                         className={cn(
                           "px-2 py-1 rounded text-xs truncate cursor-pointer hover:opacity-80 transition-opacity",
-                          post.status === "published" ? "bg-success/20 text-success" :
-                          post.status === "draft" ? "bg-muted text-muted-foreground" :
-                          "bg-primary/20 text-primary"
+                          SocialMediaPostStatusConfig[post.status].bg,
+                          SocialMediaPostStatusConfig[post.status].color
                         )}
                       >
                         {post.scheduledTime} · {post.platforms.length} platforms
@@ -356,10 +359,9 @@ function PostCard({ post, compact = false }: { post: ScheduledPost; compact?: bo
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       className={cn(
-        "rounded-lg p-2.5 cursor-pointer group transition-all hover:ring-2 hover:ring-primary/50",
-        post.status === "published" ? "bg-success/10 border border-success/20" :
-        post.status === "draft" ? "bg-muted border border-border" :
-        "bg-secondary border border-border"
+        "rounded-lg p-2.5 cursor-pointer group transition-all hover:ring-2 hover:ring-primary/50 border",
+        SocialMediaPostStatusConfig[post.status].bg,
+        "border-border"
       )}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
